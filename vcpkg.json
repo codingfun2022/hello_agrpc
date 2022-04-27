@@ -1,0 +1,10 @@
+{
+    "name": "hello-agrpc",
+    "version": "1.0.0",
+    "dependencies": [
+        "boost-asio",
+        "grpc",
+        "asio-grpc"
+    ],
+    "builtin-baseline": "a3df696929b28195b0d7a477ba6cd16dba48fa52"
+}
