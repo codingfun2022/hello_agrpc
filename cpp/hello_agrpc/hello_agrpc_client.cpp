@@ -9,7 +9,8 @@ int main(int argc, char** argv)
 {
     const std::string host = "localhost";
     const std::string port = argc >= 2 ? argv[1] : "50051";
-    const std::string addr = host + ":" + port;
+    //const std::string addr = host + ":" + port;
+    const std::string addr = "unix:///tmp/test.sock";
 
     std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
     std::unique_ptr<hello_agrpc::Greeter::Stub> stub = hello_agrpc::Greeter::NewStub(channel);

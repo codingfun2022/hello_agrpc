@@ -9,7 +9,8 @@ int main(int argc, char** argv)
 {
     const std::string host = "0.0.0.0";
     const std::string port = argc >= 2 ? argv[1] : "50051";
-    const std::string addr = host + ":" + port;
+    //const std::string addr = host + ":" + port;
+    const std::string addr = "unix:///tmp/test.sock";
 
     std::unique_ptr<grpc::Server> server;
     grpc::ServerBuilder builder;
