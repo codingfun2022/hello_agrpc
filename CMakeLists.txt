@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
 project(hello_agrpc VERSION 1.0.0.0 LANGUAGES C CXX)
 
-find_package(Boost COMPONENTS filesystem system REQUIRED CONFIG)
+find_package(Boost COMPONENTS filesystem system REQUIRED)
 
 find_package(grpc REQUIRED)
 find_package(asio-grpc REQUIRED CONFIG)

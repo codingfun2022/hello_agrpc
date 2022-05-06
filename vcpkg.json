@@ -3,9 +3,10 @@
     "version": "1.0.0",
     "dependencies": [
         "boost-asio",
+        "boost-dll",
+        "boost-process",
         "boost-filesystem",
         "boost-system",
-        "boost-dll",
         "grpc",
         "asio-grpc"
     ],
