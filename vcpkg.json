@@ -4,6 +4,8 @@
     "dependencies": [
         "boost-asio",
         "boost-filesystem",
+        "boost-system",
+        "boost-dll",
         "grpc",
         "asio-grpc"
     ],
