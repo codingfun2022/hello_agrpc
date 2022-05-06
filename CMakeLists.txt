@@ -20,3 +20,8 @@ add_executable(hello_agrpc_client cpp/hello_agrpc/hello_agrpc_client.cpp ${ASIO_
 target_include_directories(hello_agrpc_client PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(hello_agrpc_client PRIVATE asio-grpc::asio-grpc)
 target_compile_features(hello_agrpc_client PRIVATE cxx_std_20)
+
+find_package(Boost COMPONENTS filesystem system REQUIRED)
+add_executable(hello cpp/hello_agrpc/hello.cpp)
+target_link_libraries(hello PRIVATE Boost::filesystem dl)
+target_compile_features(hello PRIVATE cxx_std_20)
