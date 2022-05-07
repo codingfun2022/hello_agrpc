@@ -7,6 +7,7 @@
         "boost-process",
         "boost-filesystem",
         "boost-system",
+        "boost-uuid",
         "grpc",
         "asio-grpc"
     ],
