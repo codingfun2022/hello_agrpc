@@ -38,6 +38,7 @@ void silence_unused(Args&&... args)
 #include <forward_list>
 #include <thread>
 #include <vector>
+#include <iostream>
 
 namespace asio = boost::asio;
 
@@ -71,6 +72,8 @@ asio::awaitable<void> make_request(agrpc::GrpcContext& grpc_context, hello_agrpc
     hello_agrpc::HelloReply response;
     grpc::Status status;
     co_await agrpc::finish(reader, response, status);
+
+    std::cout << response.message() << std::endl;
 
     abort_if_not(status.ok());
 }

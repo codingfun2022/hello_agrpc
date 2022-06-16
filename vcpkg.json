@@ -11,5 +11,5 @@
         "grpc",
         "asio-grpc"
     ],
-    "builtin-baseline": "a3df696929b28195b0d7a477ba6cd16dba48fa52"
+    "builtin-baseline": "e2794913924ef606cc7bbc59c173f2714e9853c5"
 }
