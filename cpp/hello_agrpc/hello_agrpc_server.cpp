@@ -1,39 +1,142 @@
-#include <agrpc/asioGrpc.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
-#include <grpcpp/server.h>
-#include <grpcpp/server_builder.h>
+// Copyright 2022 Dennis Hezel
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <hello_agrpc/hello_agrpc.grpc.pb.h>
 
-int main(int argc, char** argv)
+#include <agrpc/asioGrpc.hpp>
+#include <boost/asio/signal_set.hpp>
+#include <boost/asio/bind_executor.hpp>
+#include <grpcpp/server.h>
+#include <grpcpp/server_builder.h>
+
+#include <forward_list>
+#include <memory>
+#include <thread>
+#include <vector>
+
+namespace asio = boost::asio;
+
+struct ServerShutdown
 {
-    const std::string host = "0.0.0.0";
-    const std::string port = argc >= 2 ? argv[1] : "50051";
-    //const std::string addr = host + ":" + port;
-    const std::string addr = "unix:///tmp/test.sock";
+    grpc::Server& server;
+    asio::basic_signal_set<agrpc::GrpcContext::executor_type> signals;
+    std::atomic_bool is_shutdown{};
+    std::thread shutdown_thread;
+
+    ServerShutdown(grpc::Server& server, agrpc::GrpcContext& grpc_context)
+        : server(server), signals(grpc_context, SIGINT, SIGTERM)
+    {
+        signals.async_wait(
+            [&](auto&& ec, auto&&)
+            {
+                if (asio::error::operation_aborted != ec)
+                {
+                    shutdown();
+                }
+            });
+    }
+
+    void shutdown()
+    {
+        if (!is_shutdown.exchange(true))
+        {
+            // We cannot call server.Shutdown() on the same thread that runs a GrpcContext because that could lead to
+            // deadlock, therefore create a new thread.
+            shutdown_thread = std::thread(
+                [&]
+                {
+                    signals.cancel();
+                    server.Shutdown();
+                });
+        }
+    }
+
+    ~ServerShutdown()
+    {
+        if (shutdown_thread.joinable())
+        {
+            shutdown_thread.join();
+        }
+        else if (!is_shutdown.exchange(true))
+        {
+            server.Shutdown();
+        }
+    }
+};
+
+static std::atomic_int counter{};
+
+void register_request_handler(agrpc::GrpcContext& grpc_context, hello_agrpc::Greeter::AsyncService& service,
+                              ServerShutdown& shutdown)
+{
+    agrpc::repeatedly_request(
+        &hello_agrpc::Greeter::AsyncService::RequestSayHello, service,
+        asio::bind_executor(
+            grpc_context,
+            [&](grpc::ServerContext&, hello_agrpc::HelloRequest& request,
+                grpc::ServerAsyncResponseWriter<hello_agrpc::HelloReply>& writer) -> asio::awaitable<void>
+            {
+                hello_agrpc::HelloReply response;
+                response.set_message("Hello " + request.name());
+                co_await agrpc::finish(writer, response, grpc::Status::OK);
+
+                // In this example we shut down the server after 20 requests
+                if (19 == counter.fetch_add(1))
+                {
+                    shutdown.shutdown();
+                }
+            }));
+}
+
+int main(int argc, const char** argv)
+{
+    const auto port = argc >= 2 ? argv[1] : "50051";
+    const auto host = std::string("0.0.0.0:") + port;
+    const auto thread_count = std::thread::hardware_concurrency();
 
     std::unique_ptr<grpc::Server> server;
-    grpc::ServerBuilder builder;
-    agrpc::GrpcContext grpc_context{builder.AddCompletionQueue()};
-    builder.AddListeningPort(addr, grpc::InsecureServerCredentials());
     hello_agrpc::Greeter::AsyncService service;
-    builder.RegisterService(&service);
-    server = builder.BuildAndStart();
+    std::forward_list<agrpc::GrpcContext> grpc_contexts;
 
-    boost::asio::co_spawn(
-        grpc_context,
-        [&]() -> boost::asio::awaitable<void>
+    {
+        grpc::ServerBuilder builder;
+        for (size_t i = 0; i < thread_count; ++i)
         {
-            grpc::ServerContext server_context;
-            hello_agrpc::HelloRequest request;
-            grpc::ServerAsyncResponseWriter<hello_agrpc::HelloReply> writer{&server_context};
-            co_await agrpc::request(&hello_agrpc::Greeter::AsyncService::RequestSayHello, service, server_context, request, writer);
-            hello_agrpc::HelloReply response;
-            response.set_message("Hello, " + request.name() + "!");
-            co_await agrpc::finish(writer, response, grpc::Status::OK);
-        },
-        boost::asio::detached);
+            grpc_contexts.emplace_front(builder.AddCompletionQueue());
+        }
+        builder.AddListeningPort(host, grpc::InsecureServerCredentials());
+        builder.RegisterService(&service);
+        server = builder.BuildAndStart();
+    }
 
-    grpc_context.run();
-    server->Shutdown();
+    ServerShutdown shutdown{*server, grpc_contexts.front()};
+
+    // Create one thread per GrpcContext.
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < thread_count; ++i)
+    {
+        threads.emplace_back(
+            [&, i]
+            {
+                auto& grpc_context = *std::next(grpc_contexts.begin(), i);
+                register_request_handler(grpc_context, service, shutdown);
+                grpc_context.run();
+            });
+    }
+
+    for (auto& thread : threads)
+    {
+        thread.join();
+    }
 }
